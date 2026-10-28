@@ -1,0 +1,18 @@
+// id:          XXX-INV-000
+// name:        Short descriptive name
+// type:        investigate
+// status:      draft
+// platform:    sentinel
+// tables:      TableName
+// requires:    none
+// parameters:  StartTime, EndTime
+// entities:    Account
+// mitre:       T0000
+// author:      JR
+// updated:     YYYY-MM-DD
+//
+// Notes: What question does this answer, and what does a suspicious result look like?
+let StartTime = ago(7d);
+let EndTime = now();
+TableName
+| where TimeGenerated between (StartTime .. EndTime)

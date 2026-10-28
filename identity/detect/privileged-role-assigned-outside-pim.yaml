@@ -1,0 +1,77 @@
+# library_id: IDN-DET-001
+id: 54d66a33-6019-44e2-ae60-0e03ee026f6f
+name: Privileged directory role assigned outside PIM
+description: |
+  A privileged Entra ID directory role was assigned directly rather than through a PIM
+  activation. Attackers who take over an admin account often grant a standing role to a
+  second account they control.
+  Expected false positives: break-glass setup and documented admin changes. Exclude known
+  automation accounts by Actor if needed.
+severity: High
+status: Available
+requiredDataConnectors:
+  - connectorId: AzureActiveDirectory
+    dataTypes:
+      - AuditLogs
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - PrivilegeEscalation
+  - Persistence
+relevantTechniques:
+  - T1098.003
+query: |
+  let PrivilegedRoles = dynamic([
+      "Global Administrator",
+      "Privileged Role Administrator",
+      "Privileged Authentication Administrator",
+      "Security Administrator",
+      "Conditional Access Administrator",
+      "Authentication Administrator",
+      "User Administrator",
+      "Application Administrator",
+      "Cloud Application Administrator",
+      "Hybrid Identity Administrator",
+      "Exchange Administrator",
+      "SharePoint Administrator",
+      "Intune Administrator"
+      ]);
+  AuditLogs
+  | where OperationName == "Add member to role"
+  | where Result =~ "success"
+  | extend InitiatorApp = tostring(InitiatedBy.app.displayName)
+  // PIM activations are written by the MS-PIM service principal
+  | where InitiatorApp != "MS-PIM"
+  | extend
+      Actor = coalesce(tostring(InitiatedBy.user.userPrincipalName), InitiatorApp),
+      ActorIP = tostring(InitiatedBy.user.ipAddress)
+  | mv-expand Target = TargetResources
+  | mv-expand Prop = Target.modifiedProperties
+  | where tostring(Prop.displayName) == "Role.DisplayName"
+  | extend RoleName = trim(@'"', tostring(Prop.newValue))
+  | where RoleName in~ (PrivilegedRoles)
+  | project
+      TimeGenerated,
+      RoleName,
+      TargetName = coalesce(tostring(Target.userPrincipalName), tostring(Target.displayName)),
+      TargetType = tostring(Target.type),
+      Actor,
+      ActorIP,
+      CorrelationId
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: TargetName
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: Actor
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: ActorIP
+version: 1.0.0
+kind: Scheduled

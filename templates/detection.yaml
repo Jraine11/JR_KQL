@@ -1,0 +1,29 @@
+# library_id: XXX-DET-000
+id: 00000000-0000-0000-0000-000000000000
+name: Short descriptive name
+description: |
+  What this detects, why it matters, and the expected false positives.
+severity: Medium
+status: Available
+requiredDataConnectors:
+  - connectorId: ConnectorId
+    dataTypes:
+      - TableName
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - Execution
+relevantTechniques:
+  - T0000
+query: |
+  TableName
+  | where Condition
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: AccountColumn
+version: 1.0.0
+kind: Scheduled

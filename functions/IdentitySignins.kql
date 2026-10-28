@@ -1,0 +1,62 @@
+// id:          FN-IDN-001
+// name:        IdentitySignins
+// type:        function
+// status:      testing
+// platform:    sentinel
+// tables:      SigninLogs, AADNonInteractiveUserSignInLogs
+// requires:    none
+// parameters:  none
+// entities:    Account, IP, Host
+// mitre:       none
+// author:      JR
+// updated:     2026-10-28
+//
+// Notes: Save as a workspace function named IdentitySignins.
+// Returns interactive and non-interactive sign-ins with one schema. The two tables store
+// LocationDetails, DeviceDetail and Status with different types (dynamic or string), so those
+// columns are converted in each table before the union. Without that, the union would create
+// suffixed duplicates such as LocationDetails_string and LocationDetails_dynamic.
+// Callers apply their own TimeGenerated filter, which is pushed down through the union.
+let Interactive = SigninLogs
+    | extend
+        SigninType = "Interactive",
+        Loc = todynamic(LocationDetails),
+        Dev = todynamic(DeviceDetail),
+        Stat = todynamic(Status),
+        ASN = tostring(AutonomousSystemNumber);
+let NonInteractive = AADNonInteractiveUserSignInLogs
+    | extend
+        SigninType = "NonInteractive",
+        Loc = todynamic(LocationDetails),
+        Dev = todynamic(DeviceDetail),
+        Stat = todynamic(Status),
+        ASN = tostring(AutonomousSystemNumber);
+union isfuzzy=true Interactive, NonInteractive
+| project
+    TimeGenerated,
+    SigninType,
+    UserPrincipalName = tolower(UserPrincipalName),
+    UserId,
+    IPAddress,
+    ASN,
+    Country = tostring(Loc.countryOrRegion),
+    City = tostring(Loc.city),
+    AppDisplayName,
+    AppId,
+    ResourceDisplayName,
+    ClientAppUsed,
+    UserAgent,
+    ResultType = tostring(ResultType),
+    FailureReason = tostring(Stat.failureReason),
+    AuthenticationRequirement,
+    ConditionalAccessStatus,
+    RiskLevelDuringSignIn,
+    RiskState,
+    DeviceId = tostring(Dev.deviceId),
+    DeviceName = tostring(Dev.displayName),
+    DeviceOS = tostring(Dev.operatingSystem),
+    DeviceTrustType = tostring(Dev.trustType),
+    DeviceIsCompliant = tostring(Dev.isCompliant),
+    SessionId = column_ifexists("SessionId", ""),
+    CorrelationId,
+    Id
