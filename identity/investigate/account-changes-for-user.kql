@@ -2,7 +2,7 @@
 // name:        Account changes for a user
 // type:        investigate
 // status:      testing
-// platform:    sentinel
+// time_column: TimeGenerated
 // tables:      AuditLogs
 // requires:    none
 // parameters:  TargetUPN, StartTime, EndTime

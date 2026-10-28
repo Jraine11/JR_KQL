@@ -1,8 +1,8 @@
 // id:          FN-IDN-001
 // name:        IdentitySignins
-// type:        function
+// type:        snippet
 // status:      testing
-// platform:    sentinel
+// time_column: TimeGenerated
 // tables:      SigninLogs, AADNonInteractiveUserSignInLogs
 // requires:    none
 // parameters:  none
@@ -11,52 +11,64 @@
 // author:      JR
 // updated:     2026-10-28
 //
-// Notes: Save as a workspace function named IdentitySignins.
+// Notes: This is the master copy. Queries that list it in `requires` embed it between the BEGIN
+// and END markers, so each query runs on its own without needing a saved function.
+// After editing, run `python3 tools/validate.py --sync` to update the copies in other queries.
+//
 // Returns interactive and non-interactive sign-ins with one schema. The two tables store
 // LocationDetails, DeviceDetail and Status with different types (dynamic or string), so those
 // columns are converted in each table before the union. Without that, the union would create
 // suffixed duplicates such as LocationDetails_string and LocationDetails_dynamic.
-// Callers apply their own TimeGenerated filter, which is pushed down through the union.
-let Interactive = SigninLogs
-    | extend
-        SigninType = "Interactive",
-        Loc = todynamic(LocationDetails),
-        Dev = todynamic(DeviceDetail),
-        Stat = todynamic(Status),
-        ASN = tostring(AutonomousSystemNumber);
-let NonInteractive = AADNonInteractiveUserSignInLogs
-    | extend
-        SigninType = "NonInteractive",
-        Loc = todynamic(LocationDetails),
-        Dev = todynamic(DeviceDetail),
-        Stat = todynamic(Status),
-        ASN = tostring(AutonomousSystemNumber);
-union isfuzzy=true Interactive, NonInteractive
-| project
-    TimeGenerated,
-    SigninType,
-    UserPrincipalName = tolower(UserPrincipalName),
-    UserId,
-    IPAddress,
-    ASN,
-    Country = tostring(Loc.countryOrRegion),
-    City = tostring(Loc.city),
-    AppDisplayName,
-    AppId,
-    ResourceDisplayName,
-    ClientAppUsed,
-    UserAgent,
-    ResultType = tostring(ResultType),
-    FailureReason = tostring(Stat.failureReason),
-    AuthenticationRequirement,
-    ConditionalAccessStatus,
-    RiskLevelDuringSignIn,
-    RiskState,
-    DeviceId = tostring(Dev.deviceId),
-    DeviceName = tostring(Dev.displayName),
-    DeviceOS = tostring(Dev.operatingSystem),
-    DeviceTrustType = tostring(Dev.trustType),
-    DeviceIsCompliant = tostring(Dev.isCompliant),
-    SessionId = column_ifexists("SessionId", ""),
-    CorrelationId,
-    Id
+// The time range is a parameter so that each table is filtered before the union.
+// UserPrincipalName is not lower-cased, so callers can filter it with =~ and have the filter applied early.
+//
+// Usage:  IdentitySignins(ago(1d), now()) | where UserPrincipalName =~ "user@contoso.com"
+// BEGIN IdentitySignins
+let IdentitySignins = (Start:datetime, End:datetime) {
+    union isfuzzy=true
+        (SigninLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "Interactive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber)),
+        (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "NonInteractive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber))
+    | project
+        TimeGenerated,
+        SigninType,
+        UserPrincipalName,
+        UserId,
+        IPAddress,
+        ASN,
+        Country = tostring(Loc.countryOrRegion),
+        City = tostring(Loc.city),
+        AppDisplayName,
+        AppId,
+        ResourceDisplayName,
+        ClientAppUsed,
+        UserAgent,
+        ResultType = tostring(ResultType),
+        FailureReason = tostring(Stat.failureReason),
+        AuthenticationRequirement,
+        ConditionalAccessStatus,
+        RiskLevelDuringSignIn,
+        RiskState,
+        DeviceId = tostring(Dev.deviceId),
+        DeviceName = tostring(Dev.displayName),
+        DeviceOS = tostring(Dev.operatingSystem),
+        DeviceTrustType = tostring(Dev.trustType),
+        DeviceIsCompliant = tostring(Dev.isCompliant),
+        SessionId = column_ifexists("SessionId", ""),
+        CorrelationId,
+        Id
+};
+// END IdentitySignins

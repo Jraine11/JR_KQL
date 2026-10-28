@@ -2,7 +2,7 @@
 // name:        Sign-in summary for a user
 // type:        investigate
 // status:      testing
-// platform:    sentinel
+// time_column: TimeGenerated
 // tables:      SigninLogs, AADNonInteractiveUserSignInLogs
 // requires:    IdentitySignins
 // parameters:  TargetUPN, StartTime, EndTime, BaselinePeriod
@@ -18,8 +18,56 @@ let TargetUPN = "user@contoso.com";
 let StartTime = ago(7d);
 let EndTime = now();
 let BaselinePeriod = 30d;
-let UserSignins = IdentitySignins
-    | where TimeGenerated between ((StartTime - BaselinePeriod) .. EndTime)
+// BEGIN IdentitySignins
+let IdentitySignins = (Start:datetime, End:datetime) {
+    union isfuzzy=true
+        (SigninLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "Interactive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber)),
+        (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "NonInteractive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber))
+    | project
+        TimeGenerated,
+        SigninType,
+        UserPrincipalName,
+        UserId,
+        IPAddress,
+        ASN,
+        Country = tostring(Loc.countryOrRegion),
+        City = tostring(Loc.city),
+        AppDisplayName,
+        AppId,
+        ResourceDisplayName,
+        ClientAppUsed,
+        UserAgent,
+        ResultType = tostring(ResultType),
+        FailureReason = tostring(Stat.failureReason),
+        AuthenticationRequirement,
+        ConditionalAccessStatus,
+        RiskLevelDuringSignIn,
+        RiskState,
+        DeviceId = tostring(Dev.deviceId),
+        DeviceName = tostring(Dev.displayName),
+        DeviceOS = tostring(Dev.operatingSystem),
+        DeviceTrustType = tostring(Dev.trustType),
+        DeviceIsCompliant = tostring(Dev.isCompliant),
+        SessionId = column_ifexists("SessionId", ""),
+        CorrelationId,
+        Id
+};
+// END IdentitySignins
+let UserSignins = IdentitySignins(StartTime - BaselinePeriod, EndTime)
     | where UserPrincipalName =~ TargetUPN;
 let BaselineIPs = UserSignins
     | where TimeGenerated < StartTime

@@ -6,15 +6,17 @@ KQL designed at supporting detection and threat capabilities within an organisat
 The library is organised **by investigation domain first**, then **by how the query is used**.
 
 ```
-functions/            Shared workspace functions (schema normalisation lives here, nowhere else)
+functions/            Shared let-function snippets (master copies, embedded into queries)
 identity/             Entra ID / AD / account-centric investigations
   investigate/        Entity-scoped pivots: "given this user / IP, show me ..."
   hunt/               Environment-wide sweeps run on demand
-  detect/             Scheduled analytic rules (Sentinel YAML), ready to deploy
+  detect/             Scheduled detections: KQL plus schedule, severity and entities in the header
 malware/              Endpoint / malware investigations (same three sub-folders)
 playbooks/            Ordered investigation runbooks that chain queries by ID
 templates/            Starting points for new queries and detections
-docs/conventions.md   Header format, parameter names, IDs, time columns
+tools/validate.py     Checks headers, IDs, snippets, time filters and the private denylist
+docs/conventions.md   Header format, parameter names, IDs, time columns, portability rules
+local/                Private material (gitignored, never published)
 ```
 
 Why this shape:
@@ -22,13 +24,13 @@ Why this shape:
 - **Domain first** matches how an investigation starts: an identity alert or a malware alert.
 - **The usage split** matches how each query runs. `investigate/` queries take an entity and
   are run by an analyst or by SOAR enrichment. `hunt/` queries sweep the whole estate.
-  `detect/` rules run on a schedule and create incidents. Each type has different needs for
-  parameters, performance and output shape.
-- **`functions/`** keeps the custom-schema differences (time column, string vs dynamic fields,
-  interactive vs non-interactive sign-ins) in one place. When the schema changes, only the
-  function changes.
-- **Playbooks** reference queries by stable ID, so manual runbooks and automation both point
-  at the same source of truth.
+  `detect/` queries run on a schedule. Each type has different needs for parameters,
+  performance and output shape.
+- **Every query is self-contained, standard-schema KQL.** It doesn't depend on saved functions or
+  platform features, so it runs unchanged in any environment that has the tables, and a query
+  ID plus parameters is enough to hand an investigation to another team.
+- **Shared logic lives in `functions/` as a master copy.** Queries embed that copy, and the
+  validator keeps the embedded copies identical to it.
 
 ## Index
 
@@ -38,11 +40,12 @@ Why this shape:
 | IDN-INV-002 | investigate | [Account changes for a user](identity/investigate/account-changes-for-user.kql) |
 | IDN-INV-003 | investigate | [Sign-ins from an IP](identity/investigate/signins-from-ip.kql) |
 | IDN-HNT-001 | hunt | [Password spray by source IP](identity/hunt/password-spray-by-source-ip.kql) |
-| IDN-DET-001 | detect | [Privileged role assigned outside PIM](identity/detect/privileged-role-assigned-outside-pim.yaml) |
+| IDN-DET-001 | detect | [Privileged role assigned outside PIM](identity/detect/privileged-role-assigned-outside-pim.kql) |
 | MAL-INV-001 | investigate | [Device process activity around a time](malware/investigate/device-process-activity-around-time.kql) |
 | MAL-INV-002 | investigate | [Hash prevalence](malware/investigate/hash-prevalence.kql) |
 | MAL-HNT-001 | hunt | [Encoded PowerShell (decoded, rarest first)](malware/hunt/encoded-powershell.kql) |
-| MAL-DET-001 | detect | [Office app spawning a script interpreter / LOLBin](malware/detect/office-app-spawning-interpreter.yaml) |
+| MAL-DET-001 | detect | [Office app spawning a script interpreter / LOLBin](malware/detect/office-app-spawning-interpreter.kql) |
+| FN-IDN-001 | snippet | [IdentitySignins](functions/IdentitySignins.kql) |
 
 Playbooks: [Compromised account triage](playbooks/compromised-account-triage.md) ·
 [Malware alert triage](playbooks/malware-alert-triage.md)
@@ -52,18 +55,29 @@ Playbooks: [Compromised account triage](playbooks/compromised-account-triage.md)
 Candidates to fill out the identity and malware areas next.
 
 **Identity**
-- MFA fatigue / repeated MFA denials (`500121`) followed by success
-- Token replay / AiTM indicators (same `SessionId` across IPs or ASNs)
+- MFA fatigue: repeated MFA denials (`500121`) followed by success (`SigninLogs`)
+- Token replay / AiTM indicators: same `SessionId` across IPs or ASNs
 - New MFA method registered shortly after a risky or unfamiliar sign-in (detection)
-- OAuth app consent with high-risk permissions
-- Inbox rule creation / mail forwarding following a suspicious sign-in
-- On-prem: Kerberoasting (4769 RC4), AS-REP roasting, DCSync (4662 replication GUIDs)
+- Risk events and risky-user history for a user (`AADUserRiskEvents`, `AADRiskyUsers`)
+- UEBA anomalies for a user (`BehaviorAnalytics`)
+- OAuth app consent with high-risk permissions (`AuditLogs`)
+- Inbox rule creation / mail forwarding after a suspicious sign-in (`CloudAppEvents`, `OfficeActivity`)
+- Service principal sign-ins from new IPs (`AADServicePrincipalSignInLogs`)
+- On-prem: Kerberoasting, AS-REP roasting, LDAP recon and DCSync (`IdentityLogonEvents`,
+  `IdentityQueryEvents`, `IdentityDirectoryEvents`, `SecurityEvent`)
 - Legacy auth usage by user
 
 **Malware**
-- Network connections for a device around a time (MAL-INV)
-- Persistence sweep: Run keys, services, scheduled tasks, WMI subscriptions on a device
-- File / process lineage for a hash: who dropped it and from where (download URL, email, USB)
+- Alert to entity pivot: device, user, files and IPs for an alert (`AlertInfo`, `AlertEvidence`)
+- Network connections for a device around a time (`DeviceNetworkEvents`)
+- Persistence sweep: Run keys, services, scheduled tasks on a device (`DeviceRegistryEvents`, `DeviceEvents`)
+- File lineage for a hash: who dropped it and from where (`DeviceFileEvents`, `EmailAttachmentInfo`, `UrlClickEvents`)
+- Unsigned or rarely signed binaries executed from user-writable paths (`DeviceFileCertificateInfo`)
 - LOLBin downloads (certutil, bitsadmin, curl, mshta with URLs)
 - Rare processes making outbound connections
-- Defender AV detections that were not remediated
+- AV detections that were not remediated (`DeviceEvents`)
+
+## Contributing
+
+Start from a file in `templates/`, follow [docs/conventions.md](docs/conventions.md), and run
+`python3 tools/validate.py` before committing.

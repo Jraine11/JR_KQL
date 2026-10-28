@@ -2,7 +2,7 @@
 // name:        Sign-ins from an IP
 // type:        investigate
 // status:      testing
-// platform:    sentinel
+// time_column: TimeGenerated
 // tables:      SigninLogs, AADNonInteractiveUserSignInLogs
 // requires:    IdentitySignins
 // parameters:  TargetIP, StartTime, EndTime
@@ -16,8 +16,56 @@
 let TargetIP = "203.0.113.10";
 let StartTime = ago(7d);
 let EndTime = now();
-IdentitySignins
-| where TimeGenerated between (StartTime .. EndTime)
+// BEGIN IdentitySignins
+let IdentitySignins = (Start:datetime, End:datetime) {
+    union isfuzzy=true
+        (SigninLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "Interactive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber)),
+        (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "NonInteractive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber))
+    | project
+        TimeGenerated,
+        SigninType,
+        UserPrincipalName,
+        UserId,
+        IPAddress,
+        ASN,
+        Country = tostring(Loc.countryOrRegion),
+        City = tostring(Loc.city),
+        AppDisplayName,
+        AppId,
+        ResourceDisplayName,
+        ClientAppUsed,
+        UserAgent,
+        ResultType = tostring(ResultType),
+        FailureReason = tostring(Stat.failureReason),
+        AuthenticationRequirement,
+        ConditionalAccessStatus,
+        RiskLevelDuringSignIn,
+        RiskState,
+        DeviceId = tostring(Dev.deviceId),
+        DeviceName = tostring(Dev.displayName),
+        DeviceOS = tostring(Dev.operatingSystem),
+        DeviceTrustType = tostring(Dev.trustType),
+        DeviceIsCompliant = tostring(Dev.isCompliant),
+        SessionId = column_ifexists("SessionId", ""),
+        CorrelationId,
+        Id
+};
+// END IdentitySignins
+IdentitySignins(StartTime, EndTime)
 | where IPAddress == TargetIP
 | summarize
     FirstSeen = min(TimeGenerated),
@@ -28,5 +76,5 @@ IdentitySignins
     Apps = make_set(AppDisplayName, 20),
     UserAgents = make_set(UserAgent, 10),
     SigninTypes = make_set(SigninType)
-    by UserPrincipalName
+    by UserPrincipalName = tolower(UserPrincipalName)
 | order by Successes desc, Attempts desc

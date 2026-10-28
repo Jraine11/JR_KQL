@@ -1,0 +1,20 @@
+// id:          XXX-DET-000
+// name:        Short descriptive name
+// type:        detect
+// status:      draft
+// time_column: TimeGenerated
+// tables:      TableName
+// requires:    none
+// parameters:  Lookback
+// severity:    Medium
+// frequency:   1h
+// tactics:     Execution
+// mitre:       T0000
+// entities:    Host=DeviceName, Account=AccountName
+// author:      JR
+// updated:     YYYY-MM-DD
+//
+// Notes: What this detects, why it matters, and the expected false positives.
+let Lookback = 1h;
+TableName
+| where TimeGenerated > ago(Lookback)

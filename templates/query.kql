@@ -2,7 +2,7 @@
 // name:        Short descriptive name
 // type:        investigate
 // status:      draft
-// platform:    sentinel
+// time_column: TimeGenerated
 // tables:      TableName
 // requires:    none
 // parameters:  StartTime, EndTime

@@ -16,3 +16,6 @@ persistence change, revoke sessions, reset credentials and remove the new MFA me
 
 **Automation mapping:** steps 1 to 3 need only `TargetUPN` / `TargetIP`, so a SOAR playbook can
 run them on incident creation and add the results as incident comments.
+
+**Data you cannot access:** every query is self-contained, so if part of the data sits in a store you
+cannot query, send its owners the query ID and parameters and ask them to run it there.
