@@ -39,10 +39,15 @@ Why this shape:
 | IDN-INV-001 | investigate | [Sign-in summary for a user](identity/investigate/signin-summary-for-user.kql) |
 | IDN-INV-002 | investigate | [Account changes for a user](identity/investigate/account-changes-for-user.kql) |
 | IDN-INV-003 | investigate | [Sign-ins from an IP](identity/investigate/signins-from-ip.kql) |
+| IDN-INV-004 | investigate | [Session reuse across networks for a user](identity/investigate/session-reuse-for-user.kql) |
+| IDN-INV-005 | investigate | [Mailbox rules, forwarding and permissions for a user](identity/investigate/mailbox-rules-and-forwarding-for-user.kql) |
 | IDN-HNT-001 | hunt | [Password spray by source IP](identity/hunt/password-spray-by-source-ip.kql) |
 | IDN-DET-001 | detect | [Privileged role assigned outside PIM](identity/detect/privileged-role-assigned-outside-pim.kql) |
 | MAL-INV-001 | investigate | [Device process activity around a time](malware/investigate/device-process-activity-around-time.kql) |
 | MAL-INV-002 | investigate | [Hash prevalence](malware/investigate/hash-prevalence.kql) |
+| MAL-INV-003 | investigate | [Device network activity around a time](malware/investigate/device-network-activity-around-time.kql) |
+| MAL-INV-004 | investigate | [Device persistence changes around a time](malware/investigate/device-persistence-around-time.kql) |
+| MAL-INV-005 | investigate | [File origin for a hash](malware/investigate/file-origin.kql) |
 | MAL-HNT-001 | hunt | [Encoded PowerShell (decoded, rarest first)](malware/hunt/encoded-powershell.kql) |
 | MAL-DET-001 | detect | [Office app spawning a script interpreter / LOLBin](malware/detect/office-app-spawning-interpreter.kql) |
 | FN-IDN-001 | snippet | [IdentitySignins](functions/IdentitySignins.kql) |
@@ -56,12 +61,10 @@ Candidates to fill out the identity and malware areas next.
 
 **Identity**
 - MFA fatigue: repeated MFA denials (`500121`) followed by success (`SigninLogs`)
-- Token replay / AiTM indicators: same `SessionId` across IPs or ASNs
 - New MFA method registered shortly after a risky or unfamiliar sign-in (detection)
 - Risk events and risky-user history for a user (`AADUserRiskEvents`, `AADRiskyUsers`)
 - UEBA anomalies for a user (`BehaviorAnalytics`)
 - OAuth app consent with high-risk permissions (`AuditLogs`)
-- Inbox rule creation / mail forwarding after a suspicious sign-in (`CloudAppEvents`, `OfficeActivity`)
 - Service principal sign-ins from new IPs (`AADServicePrincipalSignInLogs`)
 - On-prem: Kerberoasting, AS-REP roasting, LDAP recon and DCSync (`IdentityLogonEvents`,
   `IdentityQueryEvents`, `IdentityDirectoryEvents`, `SecurityEvent`)
@@ -69,9 +72,6 @@ Candidates to fill out the identity and malware areas next.
 
 **Malware**
 - Alert to entity pivot: device, user, files and IPs for an alert (`AlertInfo`, `AlertEvidence`)
-- Network connections for a device around a time (`DeviceNetworkEvents`)
-- Persistence sweep: Run keys, services, scheduled tasks on a device (`DeviceRegistryEvents`, `DeviceEvents`)
-- File lineage for a hash: who dropped it and from where (`DeviceFileEvents`, `EmailAttachmentInfo`, `UrlClickEvents`)
 - Unsigned or rarely signed binaries executed from user-writable paths (`DeviceFileCertificateInfo`)
 - LOLBin downloads (certutil, bitsadmin, curl, mshta with URLs)
 - Rare processes making outbound connections

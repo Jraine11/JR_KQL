@@ -1,0 +1,72 @@
+// id:          IDN-INV-005
+// name:        Mailbox rules, forwarding and permissions for a user
+// type:        investigate
+// status:      testing
+// time_column: TimeGenerated
+// tables:      OfficeActivity
+// requires:    none
+// parameters:  TargetUPN, StartTime, EndTime
+// entities:    Account, IP
+// mitre:       T1564.008, T1114.003, T1098.002
+// author:      JR
+// updated:     2026-10-29
+//
+// Notes: Exchange changes an attacker makes after taking over a mailbox: inbox rules that
+// forward, delete or hide mail, mailbox-level forwarding, and new delegate permissions.
+// Suspicious is true for forwarding or redirecting, deleting, moving mail to rarely checked folders,
+// or rule names made only of punctuation. ClientIP has its port removed so it can be compared
+// with the sign-in IPs from IDN-INV-001.
+// UpdateInboxRules (rules created in the Outlook client) has fewer details in Parameters than
+// New-InboxRule. If the rule detail is empty, check the raw row.
+let TargetUPN = "user@contoso.com";
+let StartTime = ago(30d);
+let EndTime = now();
+let MailboxOps = dynamic([
+    "New-InboxRule", "Set-InboxRule", "Enable-InboxRule", "UpdateInboxRules",
+    "Set-Mailbox", "Add-MailboxPermission", "Add-RecipientPermission",
+    "Add-MailboxFolderPermission", "Set-MailboxFolderPermission"
+    ]);
+let HidingFolders = dynamic(["RSS Feeds", "RSS Subscriptions", "Conversation History", "Archive", "Junk Email", "Deleted Items"]);
+OfficeActivity
+| where TimeGenerated between (StartTime .. EndTime)
+| where OfficeWorkload == "Exchange"
+| where Operation in (MailboxOps)
+| where UserId =~ TargetUPN or MailboxOwnerUPN =~ TargetUPN or OfficeObjectId has TargetUPN or Parameters has TargetUPN
+| mv-apply P = todynamic(Parameters) on (
+    summarize Params = make_bag(bag_pack(tostring(P.Name), P.Value))
+    )
+| extend
+    RuleName = tostring(Params.Name),
+    ForwardTo = strcat_delim(" ", tostring(Params.ForwardTo), tostring(Params.ForwardAsAttachmentTo), tostring(Params.RedirectTo)),
+    MailboxForwarding = coalesce(tostring(Params.ForwardingSmtpAddress), tostring(Params.ForwardingAddress)),
+    DeletesMail = tostring(Params.DeleteMessage) =~ "True" or tostring(Params.SoftDeleteMessage) =~ "True",
+    MoveToFolder = tostring(Params.MoveToFolder),
+    MatchWords = strcat_delim(" | ", tostring(Params.SubjectContainsWords), tostring(Params.BodyContainsWords),
+        tostring(Params.SubjectOrBodyContainsWords), tostring(Params.FromAddressContainsWords))
+| extend Suspicious =
+    isnotempty(trim(" ", ForwardTo))
+    or isnotempty(MailboxForwarding)
+    or DeletesMail
+    or MoveToFolder has_any (HidingFolders)
+    or (isnotempty(RuleName) and RuleName matches regex @"^[^A-Za-z0-9]+$")
+// OfficeActivity records ClientIP as ip:port or [ipv6]:port
+| extend ClientIP = case(
+    ClientIP startswith "[", extract(@"^\[([^\]]+)\]", 1, ClientIP),
+    countof(ClientIP, ":") == 1, tostring(split(ClientIP, ":")[0]),
+    ClientIP)
+| project
+    TimeGenerated,
+    Operation,
+    ResultStatus,
+    Suspicious,
+    Actor = UserId,
+    ClientIP,
+    Target = OfficeObjectId,
+    RuleName,
+    ForwardTo,
+    MailboxForwarding,
+    DeletesMail,
+    MoveToFolder,
+    MatchWords,
+    Params
+| order by TimeGenerated asc
