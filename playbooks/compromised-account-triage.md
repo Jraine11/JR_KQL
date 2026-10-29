@@ -1,6 +1,6 @@
 # Compromised account triage
 
-**Trigger:** risky sign-in alert, user report, password spray hit (IDN-HNT-001), or an IOC IP.
+**Trigger:** risky sign-in alert, user report, password spray hit (IDN-HNT-001), MFA fatigue hit (IDN-HNT-002), or an IOC IP.
 **Inputs:** `TargetUPN`, and optionally `TargetIP`.
 
 | Step | Query | Question | Escalate if |

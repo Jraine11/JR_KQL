@@ -1,0 +1,63 @@
+// id:          IDN-HNT-002
+// name:        MFA fatigue: repeated MFA denials, then approval
+// type:        hunt
+// status:      testing
+// time_column: TimeGenerated
+// tables:      SigninLogs
+// requires:    none
+// parameters:  StartTime, EndTime, MinDenials, MaxGapToApproval
+// entities:    Account, IP
+// mitre:       T1621
+// author:      JR
+// updated:     2026-10-29
+//
+// Notes: Finds users who got repeated MFA prompts from one source IP that were denied or
+// ignored (ResultType 500121). Approved is true when an MFA sign-in from that same IP succeeded
+// between the first denial and MaxGapToApproval after the last one. That pattern means the user
+// gave in and accepted the attacker's prompt.
+// Rows where Approved is true are the priority. Treat the account as compromised and run the
+// compromised account playbook. Denials that include a fraud report are also worth following
+// up, because the user recognised an attack.
+// Once the thresholds are tuned, this can be turned into a detection.
+let StartTime = ago(1d);
+let EndTime = now();
+let MinDenials = 3;
+let MaxGapToApproval = 1h;
+let Denials = materialize(
+    SigninLogs
+    | where TimeGenerated between (StartTime .. EndTime)
+    | where ResultType == "500121"
+    | summarize
+        FirstDenial = min(TimeGenerated),
+        LastDenial = max(TimeGenerated),
+        Denials = count(),
+        DenialDetails = make_set(tostring(Status.additionalDetails), 10),
+        Apps = make_set(AppDisplayName, 10),
+        UserAgents = make_set(UserAgent, 5),
+        Country = take_any(tostring(LocationDetails.countryOrRegion)),
+        ASN = take_any(AutonomousSystemNumber)
+        by UserPrincipalName = tolower(UserPrincipalName), IPAddress
+    | where Denials >= MinDenials
+    );
+let Approvals = SigninLogs
+    | where TimeGenerated between (StartTime .. (EndTime + MaxGapToApproval))
+    | where ResultType == "0"
+    | where AuthenticationRequirement == "multiFactorAuthentication"
+    | extend UserPrincipalName = tolower(UserPrincipalName)
+    | where UserPrincipalName in (Denials | distinct UserPrincipalName)
+    | project UserPrincipalName, IPAddress, ApprovalTime = TimeGenerated;
+Denials
+| join kind=leftouter Approvals on UserPrincipalName, IPAddress
+| summarize
+    ApprovedAt = minif(ApprovalTime, ApprovalTime between (FirstDenial .. (LastDenial + MaxGapToApproval))),
+    FirstDenial = min(FirstDenial),
+    LastDenial = max(LastDenial),
+    Denials = max(Denials),
+    DenialDetails = take_any(DenialDetails),
+    Apps = take_any(Apps),
+    UserAgents = take_any(UserAgents),
+    Country = take_any(Country),
+    ASN = take_any(ASN)
+    by UserPrincipalName, IPAddress
+| extend Approved = isnotnull(ApprovedAt)
+| order by Approved desc, Denials desc

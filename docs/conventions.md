@@ -83,6 +83,7 @@ Use **the same names everywhere**, so automation can substitute values without p
 | `TargetIP` | string | Source IP address |
 | `TargetDevice` | string | Device name (short name or FQDN) |
 | `TargetSHA256` | string | File hash, lower-case |
+| `TargetAlertId` | string | Alert ID from `AlertInfo` / `AlertEvidence` |
 | `StartTime` / `EndTime` | datetime | Range-based queries |
 | `PivotTime` | datetime | Event-centred queries (an alert time) |
 | `WindowBefore` / `WindowAfter` | timespan | Range around `PivotTime` |

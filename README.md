@@ -42,12 +42,14 @@ Why this shape:
 | IDN-INV-004 | investigate | [Session reuse across networks for a user](identity/investigate/session-reuse-for-user.kql) |
 | IDN-INV-005 | investigate | [Mailbox rules, forwarding and permissions for a user](identity/investigate/mailbox-rules-and-forwarding-for-user.kql) |
 | IDN-HNT-001 | hunt | [Password spray by source IP](identity/hunt/password-spray-by-source-ip.kql) |
+| IDN-HNT-002 | hunt | [MFA fatigue: repeated denials, then approval](identity/hunt/mfa-fatigue.kql) |
 | IDN-DET-001 | detect | [Privileged role assigned outside PIM](identity/detect/privileged-role-assigned-outside-pim.kql) |
 | MAL-INV-001 | investigate | [Device process activity around a time](malware/investigate/device-process-activity-around-time.kql) |
 | MAL-INV-002 | investigate | [Hash prevalence](malware/investigate/hash-prevalence.kql) |
 | MAL-INV-003 | investigate | [Device network activity around a time](malware/investigate/device-network-activity-around-time.kql) |
 | MAL-INV-004 | investigate | [Device persistence changes around a time](malware/investigate/device-persistence-around-time.kql) |
 | MAL-INV-005 | investigate | [File origin for a hash](malware/investigate/file-origin.kql) |
+| MAL-INV-006 | investigate | [Alert entities and next steps](malware/investigate/alert-entities.kql) |
 | MAL-HNT-001 | hunt | [Encoded PowerShell (decoded, rarest first)](malware/hunt/encoded-powershell.kql) |
 | MAL-DET-001 | detect | [Office app spawning a script interpreter / LOLBin](malware/detect/office-app-spawning-interpreter.kql) |
 | FN-IDN-001 | snippet | [IdentitySignins](functions/IdentitySignins.kql) |
@@ -60,7 +62,6 @@ Playbooks: [Compromised account triage](playbooks/compromised-account-triage.md)
 Candidates to fill out the identity and malware areas next.
 
 **Identity**
-- MFA fatigue: repeated MFA denials (`500121`) followed by success (`SigninLogs`)
 - New MFA method registered shortly after a risky or unfamiliar sign-in (detection)
 - Risk events and risky-user history for a user (`AADUserRiskEvents`, `AADRiskyUsers`)
 - UEBA anomalies for a user (`BehaviorAnalytics`)
@@ -71,7 +72,6 @@ Candidates to fill out the identity and malware areas next.
 - Legacy auth usage by user
 
 **Malware**
-- Alert to entity pivot: device, user, files and IPs for an alert (`AlertInfo`, `AlertEvidence`)
 - Unsigned or rarely signed binaries executed from user-writable paths (`DeviceFileCertificateInfo`)
 - LOLBin downloads (certutil, bitsadmin, curl, mshta with URLs)
 - Rare processes making outbound connections
