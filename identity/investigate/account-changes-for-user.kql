@@ -1,0 +1,63 @@
+// id:          IDN-INV-002
+// name:        Account changes for a user
+// type:        investigate
+// status:      testing
+// time_column: TimeGenerated
+// tables:      AuditLogs
+// requires:    none
+// parameters:  TargetUPN, StartTime, EndTime
+// entities:    Account, IP
+// mitre:       T1098, T1556.006
+// author:      JR
+// updated:     2026-10-28
+//
+// Notes: Lists Entra ID audit events where the user is the target or the actor. HighInterest
+// flags changes an attacker makes to keep access: MFA methods, passwords, roles and app consent.
+// Compare ActorIP with the IPs from IDN-INV-001.
+let TargetUPN = "user@contoso.com";
+let StartTime = ago(30d);
+let EndTime = now();
+let HighInterestOps = dynamic([
+    "User registered security info",
+    "User changed default security info",
+    "User deleted security info",
+    "Admin registered security info",
+    "Admin deleted security info",
+    "Disable Strong Authentication",
+    "Reset password (by admin)",
+    "Reset user password",
+    "Change user password",
+    "Change password (self-service)",
+    "Add member to role",
+    "Add eligible member to role",
+    "Consent to application",
+    "Add app role assignment grant to user",
+    "Add owner to application",
+    "Add owner to service principal"
+    ]);
+AuditLogs
+| where TimeGenerated between (StartTime .. EndTime)
+| where TargetResources has TargetUPN or InitiatedBy has TargetUPN
+| extend
+    Actor = coalesce(tostring(InitiatedBy.user.userPrincipalName), tostring(InitiatedBy.app.displayName)),
+    ActorIP = tostring(InitiatedBy.user.ipAddress)
+| mv-expand Target = TargetResources
+| extend TargetName = coalesce(tostring(Target.userPrincipalName), tostring(Target.displayName))
+| where TargetName =~ TargetUPN or Actor =~ TargetUPN
+| extend
+    UserRole = iff(Actor =~ TargetUPN, "Actor", "Target"),
+    HighInterest = OperationName in (HighInterestOps)
+| project
+    TimeGenerated,
+    OperationName,
+    Result,
+    HighInterest,
+    UserRole,
+    Actor,
+    ActorIP,
+    TargetName,
+    TargetType = tostring(Target.type),
+    ModifiedProperties = Target.modifiedProperties,
+    LoggedByService,
+    CorrelationId
+| order by TimeGenerated asc

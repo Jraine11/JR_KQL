@@ -1,0 +1,93 @@
+// id:          IDN-INV-001
+// name:        Sign-in summary for a user
+// type:        investigate
+// status:      testing
+// time_column: TimeGenerated
+// tables:      SigninLogs, AADNonInteractiveUserSignInLogs
+// requires:    IdentitySignins
+// parameters:  TargetUPN, StartTime, EndTime, BaselinePeriod
+// entities:    Account, IP
+// mitre:       T1078.004
+// author:      JR
+// updated:     2026-10-28
+//
+// Notes: One row per source IP and location for the user in the window. SeenInBaseline is
+// false when the IP had no successful sign-in in the BaselinePeriod before StartTime.
+// Investigate rows where SeenInBaseline is false, and especially those with both failures and successes.
+let TargetUPN = "user@contoso.com";
+let StartTime = ago(7d);
+let EndTime = now();
+let BaselinePeriod = 30d;
+// BEGIN IdentitySignins
+let IdentitySignins = (Start:datetime, End:datetime) {
+    union isfuzzy=true
+        (SigninLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "Interactive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber)),
+        (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated between (Start .. End)
+        | extend
+            SigninType = "NonInteractive",
+            Loc = todynamic(LocationDetails),
+            Dev = todynamic(DeviceDetail),
+            Stat = todynamic(Status),
+            ASN = tostring(AutonomousSystemNumber))
+    | project
+        TimeGenerated,
+        SigninType,
+        UserPrincipalName,
+        UserId,
+        IPAddress,
+        ASN,
+        Country = tostring(Loc.countryOrRegion),
+        City = tostring(Loc.city),
+        AppDisplayName,
+        AppId,
+        ResourceDisplayName,
+        ClientAppUsed,
+        UserAgent,
+        ResultType = tostring(ResultType),
+        FailureReason = tostring(Stat.failureReason),
+        AuthenticationRequirement,
+        ConditionalAccessStatus,
+        RiskLevelDuringSignIn,
+        RiskState,
+        DeviceId = tostring(Dev.deviceId),
+        DeviceName = tostring(Dev.displayName),
+        DeviceOS = tostring(Dev.operatingSystem),
+        DeviceTrustType = tostring(Dev.trustType),
+        DeviceIsCompliant = tostring(Dev.isCompliant),
+        SessionId = column_ifexists("SessionId", ""),
+        CorrelationId,
+        Id
+};
+// END IdentitySignins
+let UserSignins = IdentitySignins(StartTime - BaselinePeriod, EndTime)
+    | where UserPrincipalName =~ TargetUPN;
+let BaselineIPs = UserSignins
+    | where TimeGenerated < StartTime
+    | where ResultType == "0"
+    | distinct IPAddress;
+UserSignins
+| where TimeGenerated >= StartTime
+| summarize
+    FirstSeen = min(TimeGenerated),
+    LastSeen = max(TimeGenerated),
+    Attempts = count(),
+    Successes = countif(ResultType == "0"),
+    Failures = countif(ResultType != "0"),
+    ResultTypes = make_set(ResultType, 20),
+    Apps = make_set(AppDisplayName, 20),
+    ClientApps = make_set(ClientAppUsed, 10),
+    UserAgents = make_set(UserAgent, 10),
+    DeviceOS = make_set(DeviceOS, 5),
+    SigninTypes = make_set(SigninType),
+    RiskLevels = make_set(RiskLevelDuringSignIn, 5)
+    by IPAddress, ASN, Country, City
+| extend SeenInBaseline = IPAddress in (BaselineIPs)
+| order by SeenInBaseline asc, FirstSeen asc
